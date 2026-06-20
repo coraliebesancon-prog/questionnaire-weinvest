@@ -1199,69 +1199,112 @@ showStep(1);
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxB5IS3O6YiPEeoSV1RzOVeU2fMpHppnSVpdlTBb52M2BM_bIh8c3aLcwvG0NOg-XW9/exec";
 
 function sendToSheet(profileName) {
+
+  function labelize(group, labelMap) {
+    return Object.keys(multi[group] || {}).map(k => labelMap[k] || k).join(', ') || '—';
+  }
+
   const typeLabels = {
     maison:'Maison individuelle', appart:'Appartement', ferme:'Corps de ferme / grange',
     chalet:'Chalet', villa:'Maison de caractère', terrain:'Terrain à bâtir', immeuble:'Immeuble de rapport'
   };
-  const types = Object.keys(multi.type || {}).map(t => typeLabels[t] || t).join(', ');
-
-  const nuisLabels = {
-    route:'Route passante', train:'Voie ferrée', voisins:'Voisins proches',
-    inond:'Zone inondable', industrie:'Zone industrielle', pylones:'Pylônes',
-    copro:'Copropriété chargée', escaliers:'Sans ascenseur', glissement:'Glissement de terrain'
+  const compoLabels = {
+    cave:'Cave', garage:'Garage/parking couvert', bureau:'Bureau séparé',
+    buanderie:'Buanderie/cellier', dressing:'Dressing', sdb2:'2 salles de bain',
+    suite:'Suite parentale', combles:'Combles aménageables'
   };
-  const nuisances = Object.keys(multi.nuis || {}).map(n => nuisLabels[n] || n).join(', ');
-
+  const styleLabels = {
+    contemporain:'Contemporain', traditionnel:'Traditionnel/dauphinois', ancien:'Ancien avec cachet',
+    chalet:'Chalet/montagne', loft:'Loft/industriel', archi:'Architecture singulière', peupimporte:'Indifférent'
+  };
+  const matLabels = {
+    pierre:'Pierre', bois:'Bois/ossature bois', brique:'Brique',
+    enduit:'Enduit traditionnel', acier:'Métal/acier', baies:'Grandes baies vitrées'
+  };
+  const terrainLabels = {
+    plat:'Terrain plat', vue:'Vue dégagée', clos:'Terrain clos', arbore:'Arbres/végétation',
+    piscine:'Possibilité piscine', potager:'Potager', constructible:'Terrain constructible additionnel'
+  };
   const commodLabels = {
     ecoles:'Écoles', commerces:'Commerces', transports:'Transports', gare:'Gare/TER',
-    med:'Médecins', sport:'Sport', ski:'Domaine skiable', resto:'Restaurants',
-    autoroute:'Autoroute', fibre:'Fibre', nature:'Nature/Sentiers'
+    med:'Médecins/hôpital', sport:'Sport', ski:'Domaine skiable',
+    resto:'Restaurants/culture', autoroute:'Autoroute/rocade', fibre:'Fibre optique', nature:'Nature/sentiers'
   };
-  const commodites = Object.keys(multi.commod || {}).map(c => commodLabels[c] || c).join(', ');
-
-  const prioMap = { must:'Indispensable', nice:'Un plus', skip:'Ignorer' };
-  const priorites = Object.entries(multi.prio || {})
-    .map(([k, v]) => `${k}: ${prioMap[v] || v}`).join(' | ');
-
-  const situMap = {
-    locataire:'Locataire', proprio_vendre:'Propriétaire (vente)',
-    proprio_garder:'Propriétaire (garde)', heberge:'Hébergé(e)'
+  const nuisLabels = {
+    route:'Route passante', train:'Voie ferrée', voisins:'Voisins proches/mitoyenneté',
+    inond:'Zone inondable (PPRi)', industrie:'Zone industrielle/ICPE',
+    pylones:'Pylônes/antennes', copro:'Copropriété chargée',
+    escaliers:'Sans ascenseur', glissement:'Risque glissement terrain'
   };
+
+  const prioMap = { must:'Indispensable', nice:'Un plus', skip:'Pas important' };
+  const prioLabelMap = {
+    luminosite:'Luminosité', calme:'Calme et tranquillité', vue:'Vue dégagée',
+    garage:'Garage/parking', exterieur:'Extérieur privatif', dpe:'Bon DPE',
+    quartier:'Qualité du quartier', ecoles:'Proximité écoles', transport:'Transports proches',
+    plain_pied:'Plain-pied', piscine:'Piscine', renovations:'Travaux faits', charges:'Faibles charges'
+  };
+  const prioDetails = Object.entries(multi.prio || {})
+    .map(([k, v]) => (prioLabelMap[k]||k) + ': ' + (prioMap[v] || v)).join(' | ') || '—';
+
+  const indispensables = Object.entries(multi.prio || {})
+    .filter(([k, v]) => v === 'must').map(([k]) => prioLabelMap[k]||k).join(', ') || '—';
+  const plusItems = Object.entries(multi.prio || {})
+    .filter(([k, v]) => v === 'nice').map(([k]) => prioLabelMap[k]||k).join(', ') || '—';
+  const ignoreItems = Object.entries(multi.prio || {})
+    .filter(([k, v]) => v === 'skip').map(([k]) => prioLabelMap[k]||k).join(', ') || '—';
+
+  const situMap = { locataire:'Locataire', proprio_vendre:'Propriétaire (vente)',
+    proprio_garder:'Propriétaire (garde)', heberge:'Hébergé(e)' };
   const envMap = { ville:'Centre-ville', periurb:'Péri-urbain', campagne:'Campagne/village', montagne:'Montagne/massif' };
+  const extMap = { non:'Pas nécessaire', terrasse:'Terrasse/balcon', petit:'Petit jardin <500m²',
+    moyen:'Jardin moyen 500-2000m²', grand:'Grand terrain >2000m²' };
   const finMap = { comptant:'Comptant', credit:'Crédit', mixte:'Mixte' };
   const avMap  = { debut:'En exploration', actif:'Recherche active', urgent:'Urgent' };
-  const delaiMap = { '1m':'< 1 mois','3m':'1–3 mois','6m':'3–6 mois','1an':'6 mois–1 an','plus':'> 1 an' };
-  const courtierMap = {
-    accord:'Accord de principe', en_cours:'En cours',
-    prevu:'Prévu', non:'Pas encore'
-  };
+  const delaiMap = { '1m':'< 1 mois','3m':'1-3 mois','6m':'3-6 mois','1an':'6 mois-1 an','plus':'> 1 an' };
+  const courtierMap = { accord:'Accord de principe', en_cours:'En cours', prevu:'Prévu', non:'Pas encore' };
+  const budgetIncLabels = { notaire:'Frais notaire', travaux:'Enveloppe travaux', agence:'Frais agence', mobilier:'Mobilier' };
 
   const payload = {
-    prenom:      ans.prenom || '',
-    nom:         ans.nom    || '',
-    email:       ans.email  || '',
-    tel:         ans.tel    || '',
-    rgpd:        document.getElementById('rgpd1').checked ? 'Oui' : 'Non',
-    situation:   situMap[ans.situation]   || ans.situation   || '',
-    zone:        ans.zone_ville           || '',
-    rayon:       ans.rayon                || '',
-    env:         envMap[ans.env]          || ans.env         || '',
-    types:       types,
-    usage:       ans.usage                || '',
-    etat:        ans.etat                 || '',
-    pieces:      document.getElementById('nb_pieces').value   || '',
-    chambres:    document.getElementById('nb_chambres').value || '',
-    surface:     document.getElementById('surf_range').value + ' m²',
-    budget:      parseInt(document.getElementById('budget_range').value).toLocaleString('fr-FR') + ' €',
-    financement: finMap[ans.financement]  || ans.financement  || '',
-    courtier:    courtierMap[ans.courtier]|| ans.courtier     || '',
-    delai:       delaiMap[document.getElementById('delai').value] || '',
-    avancement:  avMap[ans.avance]        || ans.avance       || '',
-    precisions:  document.getElementById('precisions').value  || '',
-    commodites:  commodites,
-    nuisances:   nuisances,
-    priorites:   priorites,
-    profil:      profileName
+    prenom:           ans.prenom || '',
+    nom:              ans.nom    || '',
+    email:            ans.email  || '',
+    tel:              ans.tel    || '',
+    rgpd:             document.getElementById('rgpd1').checked ? 'Oui' : 'Non',
+    rgpd_offres:      document.getElementById('rgpd2').checked ? 'Oui' : 'Non',
+    situation:        situMap[ans.situation] || ans.situation || '',
+    vente:            ans.vente || '',
+    conditionne:      ans.conditionne || '',
+    zone:             ans.zone_ville || '',
+    rayon:            ans.rayon || '',
+    env:              envMap[ans.env] || ans.env || '',
+    types:            labelize('type', typeLabels),
+    usage:            ans.usage || '',
+    etat:             ans.etat  || '',
+    pieces:           document.getElementById('nb_pieces').value || '',
+    chambres:         document.getElementById('nb_chambres').value || '',
+    surface:          document.getElementById('surf_range').value + ' m²',
+    elements_souhaites: labelize('compo', compoLabels),
+    styles:           labelize('style', styleLabels),
+    materiaux:        labelize('mat', matLabels),
+    ext_type:         extMap[ans.ext] || ans.ext || '',
+    terrain_caract:   labelize('terrain', terrainLabels),
+    orientation:      ans.orient || '',
+    commodites:       labelize('commod', commodLabels),
+    distance_commerces: document.getElementById('dist_range').value + ' min',
+    nuisances:        labelize('nuis', nuisLabels),
+    indispensables:   indispensables,
+    plus:             plusItems,
+    ignorer:          ignoreItems,
+    priorites_detail: prioDetails,
+    budget:           parseInt(document.getElementById('budget_range').value).toLocaleString('fr-FR') + ' €',
+    budget_inclut:    labelize('budget_inc', budgetIncLabels),
+    financement:      finMap[ans.financement] || ans.financement || '',
+    courtier:         courtierMap[ans.courtier] || ans.courtier || '',
+    avancement:       avMap[ans.avance] || ans.avance || '',
+    delai:            delaiMap[document.getElementById('delai').value] || '',
+    precisions:       document.getElementById('precisions').value || '',
+    profil:           profileName
   };
 
   fetch(SCRIPT_URL, {
